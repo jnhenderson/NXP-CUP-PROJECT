@@ -1,3 +1,4 @@
+
 #include "MKL25Z4.h"
 #include "stdio.h"
 #include "UART0_TxRx.h"
@@ -10,7 +11,10 @@
 #define LSC_CLK_HIGH PTE->PSOR=(0x01<<1); //Sets the clock for the camera capture, cycled later in the code to
 #define LSC_CLK_LOW PTE->PCOR=(0x01<<1);  //provide timing
 
-#define FRQ_MCGFLLCLK 20971520 						//Reference value for clock/timer division
+#define FRQ_MCGFLLCLK 20971520 			  //Reference value for clock/timer division
+
+#define BUF_SIZE	10					  //Set buffer size to fixed value
+#define LS_SIZE		128					  //Define 128bit array size
 
 short int readADC(short ChID);
 
@@ -21,21 +25,25 @@ void LSC_ReadImage(volatile short int *imgData);
 void TPM0_init(short int initMODvalue);
 void TPM0_DelayOnce(void);
 
-volatile short int imageData0[128];
+volatile short int imageData0[128];		// Temporary array
 volatile short int imageData1[128];
 volatile short int imageDataOut[128];
+volatile uint_8t LSworkingbuffer[BUF_SIZE][LS_SIZE];
+int newscan;							// Pointer for incoming scan
+int imageData0[LS_SIZE];				// int pointer for array
+int LSavergae[LS_Size];					// scan averaging int
 
 int No;
 
-	  char buf [100];   // UART buffer 
-    int n,i, pos;            // number of characters in b2097uf to be sent
+	  char buf [100];   		// UART buffer 
+    int n,i, pos;            	// number of characters in b2097uf to be sent
 	
-    int nImgRd; // number of image reading (how many times has the image been red) 
+    int nImgRd; 				// number of image reading (how many times has the image been read) 
 	
 		int bit;
-		int output[128]; // sets output array
-		int z = 2500; // line threshold 
-		int arraySize = 127; // equal to size of linescan array - 1
+		int output[128]; 		// sets output array
+		int z = 2500; 			// line threshold 
+		int arraySize = 127; 	// equal to size of linescan array - 1
 		int s;
 		int x;
 		int PosRight = 3300;
@@ -56,15 +64,15 @@ int main (void)
 	
 	short unsigned int initMODValue;
 	
-	  UART0_init();  // Initialized UART0, 57600 baud
+	  UART0_init();  			// Initialized UART0, 57600 baud
 		ServoInit();
 		Motor_Init();
-	  LSC_Init();  // configure camera
+	  LSC_Init();  				// configure camera
 	  nImgRd=0;
 	
     Motor_ON();
 	// initialize TPM0 for 1 us delay
-	  initMODValue=0.5*(float)(FRQ_MCGFLLCLK)/1000000.0; //MOD value for 1us delay
+	  initMODValue=0.5*(float)(FRQ_MCGFLLCLK)/1000000.0; 	//MOD value for 1us delay
 	  TPM0_init(initMODValue);
  	
 	while(1){
@@ -74,6 +82,38 @@ int main (void)
 		  
 		LSC_ReadImage(imageData0);
 		
+	// Fifo buffer loop
+	// New scan enter at position 0, each new scan moves the
+	// previous one down (eg. 0-1-2-3) to the max value 10
+	//
+	for(int n = 0; n < BUF_SIZE-1; n++){ 
+		LSworkingbuffer[n+1] = LSworkingbuffer[n];
+	}
+
+	// Updates the first value of the buffer to the current camera read
+	LSworkingbuffer[0] = imageData0;
+
+
+	int sum;				// Handler for summing procedure
+			// Average column for-loop
+	for(int i=0; i < LS_SIZE; i++) {
+	
+		sum = 0;
+			// Iterate over buffers for position X
+		for(int j=0; j < BUF_SIZE; j++) {
+		sum += LSworkingbuffer[j][n];
+		}
+	
+			// Calculate average value of buffer
+	LSaverage[i] = sum/BUF_SIZE;
+	}
+
+
+
+
+
+
+while();	
 		 //send the image data to PC
 			for (i=0;i<128;i++) //delay around 20ms
 			{	n = sprintf(buf, "%d ", (imageData0[i]/3500)); // convert integer value into ASCII
@@ -131,10 +171,7 @@ void LSC_Init(void){
 	
 	  SIM->SCGC6 |= 0x08000000;   // enable clock to ADC0 ; 0x8000000u
 	
-	  // Configure ADC as it will be used, but because ADC_SC1_ADCH is 31,
-    // the ADC will be inactive.  Channel 31 is just disable function.
-    // There really is no channel 31.
-	  // disable AIEN, Signle-ended, channel 31
+	  // Configure ADC, uses channel 31 disable command during config
     ADC0->SC1[0] = DIFF_SINGLE|ADC_SC1_ADCH(31);  
 		// TODO: use hardware triger, TPM0
 	  ADC0->SC2 &= ~0x40;   // ADTRG=0, software trigger
@@ -225,4 +262,3 @@ void delay(int n) {
  int i;
  for(i = 0; i < n; i++) ;
 }
-
