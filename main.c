@@ -116,7 +116,7 @@ int main (void)
 while();	
 		 //send the image data to PC
 			for (i=0;i<128;i++) //delay around 20ms
-			{	n = sprintf(buf, "%d ", (imageData0[i]/3500)); // convert integer value into ASCII
+			{	n = sprintf(buf, "%d ", (LSaverage[i]/3500)); // convert integer value into ASCII
 			  sendStr(buf, n);
 			}
 			
@@ -124,10 +124,10 @@ while();
 		rightline = 0;
 		
 			for (i=80;i<128;i++)
-			{ rightline = rightline + (imageData0[i]/3500);}
+			{ rightline = rightline + (LSaverage[i]/3500);}
 			
 			for (i=0;i<48;i++)
-			{ leftline = leftline + (imageData0[i]/3500);}
+			{ leftline = leftline + (LSaverage[i]/3500);}
 			
 		if((rightline-leftline > 3) | (leftline-rightline > 3)){
 			
