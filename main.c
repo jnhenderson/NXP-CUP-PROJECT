@@ -1,3 +1,7 @@
+//**************************************************************************/
+//						Linescan Camera Control		(LSC Control)												/
+// *************************************************************************/
+
 
 #include "MKL25Z4.h"
 #include "stdio.h"
@@ -11,10 +15,7 @@
 #define LSC_CLK_HIGH PTE->PSOR=(0x01<<1); //Sets the clock for the camera capture, cycled later in the code to
 #define LSC_CLK_LOW PTE->PCOR=(0x01<<1);  //provide timing
 
-#define FRQ_MCGFLLCLK 20971520 			  //Reference value for clock/timer division
-
-#define BUF_SIZE	10					  //Set buffer size to fixed value
-#define LS_SIZE		128					  //Define 128bit array size
+#define FRQ_MCGFLLCLK 20971520 						//Reference value for clock/timer division
 
 short int readADC(short ChID);
 
@@ -25,34 +26,29 @@ void LSC_ReadImage(volatile short int *imgData);
 void TPM0_init(short int initMODvalue);
 void TPM0_DelayOnce(void);
 
-volatile short int imageData0[128];		// Temporary array
+volatile short int imageData0[128];
 volatile short int imageData1[128];
 volatile short int imageDataOut[128];
-volatile uint_8t LSworkingbuffer[BUF_SIZE][LS_SIZE];
-int newscan;							// Pointer for incoming scan
-int imageData0[LS_SIZE];				// int pointer for array
-int LSavergae[LS_Size];					// scan averaging int
 
 int No;
 
-	  char buf [100];   		// UART buffer 
-    int n,i, pos;            	// number of characters in b2097uf to be sent
+	  char buf [100];   // UART buffer 
+    int n,i, pos;            // number of characters in b2097uf to be sent
 	
-    int nImgRd; 				// number of image reading (how many times has the image been read) 
+    int nImgRd; // number of image reading (how many times has the image been red) 
 	
 		int bit;
-		int output[128]; 		// sets output array
-		int z = 2500; 			// line threshold 
-		int arraySize = 127; 	// equal to size of linescan array - 1
+		int output[128]; // sets output array
+		int z = 2500; // line threshold 
+		int arraySize = 127; // equal to size of linescan array - 1
 		int s;
 		int x;
+		int ImageBinOut = 0b0; // set default binary to 0
 		int PosRight = 3300;
-		int PosLeft = 4900;
+		int PosLeft = 5000;
 		int PosCentre = 4150;
 		int LowPos;
 		int Pos;
-		int leftline = 0;
-		int rightline = 0;
 
 int main (void)
 {
@@ -61,73 +57,51 @@ int main (void)
     
 		int leftline = 0;
 		int rightline = 0;
+		int ScanNo = 0;
 	
 	short unsigned int initMODValue;
 	
-	  UART0_init();  			// Initialized UART0, 57600 baud
+	  UART0_init();  // Initialized UART0, 57600 baud
 		ServoInit();
 		Motor_Init();
-	  LSC_Init();  				// configure camera
+		//H_Bridge_Disable();
+		Motor_ON();
+	
+	  LSC_Init();  // configure camera
 	  nImgRd=0;
 	
-    Motor_ON();
+    
 	// initialize TPM0 for 1 us delay
-	  initMODValue=0.5*(float)(FRQ_MCGFLLCLK)/1000000.0; 	//MOD value for 1us delay
+	  initMODValue=0.5*(float)(FRQ_MCGFLLCLK)/1000000.0; //MOD value for 1us delay
 	  TPM0_init(initMODValue);
- 	
-	while(1){
+		
+  	sendHelloWorld();
+ 	while(1){
 	  	n=sprintf(buf, "\n \n nImgRd=%d\r\n", nImgRd);
 		sendStr(buf, n);	
 		  nImgRd++;		
+		  LSC_ReadImage(imageData0);
 		  
-		LSC_ReadImage(imageData0);
+			
 		
-	// Fifo buffer loop
-	// New scan enter at position 0, each new scan moves the
-	// previous one down (eg. 0-1-2-3) to the max value 10
-	//
-	for(int n = 0; n < BUF_SIZE-1; n++){ 
-		LSworkingbuffer[n+1] = LSworkingbuffer[n];
-	}
-
-	// Updates the first value of the buffer to the current camera read
-	LSworkingbuffer[0] = imageData0;
-
-
-	int sum;				// Handler for summing procedure
-			// Average column for-loop
-	for(int i=0; i < LS_SIZE; i++) {
-	
-		sum = 0;
-			// Iterate over buffers for position X
-		for(int j=0; j < BUF_SIZE; j++) {
-		sum += LSworkingbuffer[j][n];
-		}
-	
-			// Calculate average value of buffer
-	LSaverage[i] = sum/BUF_SIZE;
-	}
-
-
-
-
-
-
-while();	
+		
 		 //send the image data to PC
 			for (i=0;i<128;i++) //delay around 20ms
-			{	n = sprintf(buf, "%d ", (LSaverage[i]/3500)); // convert integer value into ASCII
+			{	n = sprintf(buf, "%d ", (imageData0[i]/3500)); // convert integer value into ASCII
 			  sendStr(buf, n);
 			}
+		
+		
 			
+		
 		leftline = 0;
 		rightline = 0;
 		
 			for (i=80;i<128;i++)
-			{ rightline = rightline + (LSaverage[i]/3500);}
+			{ rightline = rightline + (imageData0[i]/3500);}
 			
 			for (i=0;i<48;i++)
-			{ leftline = leftline + (LSaverage[i]/3500);}
+			{ leftline = leftline + (imageData0[i]/3500);}
 			
 		if((rightline-leftline > 3) | (leftline-rightline > 3)){
 			
@@ -146,6 +120,11 @@ while();
 	
 }
 }
+		
+
+				
+		
+
 		
 #define DIFF_SINGLE 0x00
 #define DIFF_DIFFERENTIAL (0x01<<5)
@@ -171,7 +150,10 @@ void LSC_Init(void){
 	
 	  SIM->SCGC6 |= 0x08000000;   // enable clock to ADC0 ; 0x8000000u
 	
-	  // Configure ADC, uses channel 31 disable command during config
+	  // Configure ADC as it will be used, but because ADC_SC1_ADCH is 31,
+    // the ADC will be inactive.  Channel 31 is just disable function.
+    // There really is no channel 31.
+	  // disable AIEN, Signle-ended, channel 31
     ADC0->SC1[0] = DIFF_SINGLE|ADC_SC1_ADCH(31);  
 		// TODO: use hardware triger, TPM0
 	  ADC0->SC2 &= ~0x40;   // ADTRG=0, software trigger
@@ -191,7 +173,8 @@ void LSC_Init(void){
 void LSC_ReadImage(volatile short int *imgData)
 {  
 	unsigned int i;
-	
+	// SI (PTD7) Digital output, CLK (PTE1) Digitaloutput
+	// AO (PTD5) Analgoue input (channel 6)
 			TPM0_DelayOnce();
 	TPM0_DelayOnce();
 	 LSC_SI_HIGH;
@@ -201,6 +184,13 @@ void LSC_ReadImage(volatile short int *imgData)
 	 LSC_SI_LOW;
 	 TPM0_DelayOnce();
 	 
+	// the following reading sequence is different from the diagram
+	// Fig. 11, page 10, AMU's TLS1401CL.pdf. 
+	// image sensor is red at the falling edge of CLK
+	// howver, Fig. 11 suggests reading image at rising edge
+	// read the 128 pixel image data
+	 // imgData[0]=(short int)readADC(6); 
+	 // LSC_CLK_LOW;
 			LSC_CLK_LOW;
 		TPM0_DelayOnce();
 		TPM0_DelayOnce();
@@ -216,6 +206,7 @@ void LSC_ReadImage(volatile short int *imgData)
 		TPM0_DelayOnce();
 	}
 	
+	// additional one CLK to allow ??
 	  LSC_CLK_HIGH;
 		TPM0_DelayOnce();
 		TPM0_DelayOnce();
@@ -236,6 +227,8 @@ short int readADC(short ChID)
 	return result;
 }
 
+// Initialize the TPM0 to generate a specified delay in number of MCGFLLCLK clocks
+// By default, the MCGFLLCLK set by system setup is 20.97152MHz
 void TPM0_init(short int initMODvalue)
 {
 	
@@ -248,6 +241,9 @@ void TPM0_init(short int initMODvalue)
 	TPM0->SC|=0x80; // clear TOF
 	// TPM0->SC|=0x08; // enable timer free-rnning mode
 }
+
+// Initialize the TPM0 to generate a specified delay in number of MCGFLLCLK clocks
+// By default, the MCGFLLCLK set by system setup is 20.97152MHz
 
 void TPM0_DelayOnce(void)
 {
@@ -262,3 +258,4 @@ void delay(int n) {
  int i;
  for(i = 0; i < n; i++) ;
 }
+
