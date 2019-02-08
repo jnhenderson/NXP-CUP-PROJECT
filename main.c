@@ -43,7 +43,6 @@ int No;
 		int arraySize = 127; // equal to size of linescan array - 1
 		int s;
 		int x;
-		int ImageBinOut = 0b0; // set default binary to 0
 		int PosRight = 3300;
 		int PosLeft = 5000;
 		int PosCentre = 4150;
@@ -57,7 +56,6 @@ int main (void)
     
 		int leftline = 0;
 		int rightline = 0;
-		int ScanNo = 0;
 	
 	short unsigned int initMODValue;
 	
